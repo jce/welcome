@@ -12,6 +12,7 @@ with open("welcome.json", "r") as f:
 
 headers = {"Authorization": f"Bearer {s['API_KEY']}", "Content-Type": "application/json"}
 
+# Waits for a user to arrive home, or leave the home.
 def wait_for_arrive_or_leave():
     last_absence = time.time()
     prev_presence = 1
@@ -22,8 +23,8 @@ def wait_for_arrive_or_leave():
         except urllib.error.URLError as e:
             time.sleep(10)
             continue
-        presence = lst["2B_pg"]["value"]
-        mhall = lst["2B_bh"]["value"]
+        presence = lst["2B_pg"]["value"]    # Presence is generic presence in the house.
+        mhall = lst["2B_bh"]["value"]       # mhall is motion in the hallway.
         if prev_presence == 0 and presence == 1:
             return "arrive"
         prev_presence = presence
@@ -33,6 +34,7 @@ def wait_for_arrive_or_leave():
             last_absence = time.time()
         time.sleep(0.5)
 
+# Finds the last change for a jDaLog input. Returns the time between change and now.
 def last_change(i):
     with urllib.request.urlopen("http://" + s["jDaLog"] + f"/in/{i}/json/week.json") as r:
         recs = json.loads(r.read())
@@ -45,6 +47,7 @@ def last_change(i):
     age = time.time() - float(lastchange)
     return age    
 
+# Finds the duration that master was away during the last away-time. Returns time in seconds.
 def last_away_duration(i):
     with urllib.request.urlopen("http://" + s["jDaLog"] + f"/in/{i}/json/week.json") as r:
         recs = json.loads(r.read())
@@ -61,11 +64,13 @@ def last_away_duration(i):
         return time.time() - float(lastleave)
     return float(lastreturn) - float(lastleave)
 
+# Joins a list of lines to a block of text, if the input is a list.
 def text(blok):
     if isinstance(blok, list):
         return "\n".join(blok)
     return blok
 
+# Generates the prompt part for a sensor.
 def add_sensor(lst, s):
     rv = ""
     if lst[s]["valid"]:
@@ -77,8 +82,8 @@ def add_sensor(lst, s):
         rv += lst[s]["name"] + " OFFLINE"
     return rv + "\n"
 
+# Generates the measurements block of the prompt, containing some sensor's actual data.
 def meas_block():
-    return ""
     with urllib.request.urlopen("http://" + s["jDaLog"] + "/in.json") as r:
         lst = json.loads(r.read().decode("ascii", "replace"))
     lst["soc"] = {}
@@ -101,42 +106,32 @@ def meas_block():
     rv += f"The last time that master took a shower is {last_away_duration('2B_sh'):.0f} seconds ago.\n"
     return rv
 
+# Generates the part of the measurements prompt that only occurs during a master return.
 def return_block():
     return f"The master was away for {last_away_duration('2B_pg'):.0f} seconds.\n"
     
-#print(prompt)
-
-VERTALING = {
+Translation = {
     "\u2014": "-", "\u2013": "-",      # em-dash, en-dash
     "\u2018": "'", "\u2019": "'",      # curly quotes
     "\u201c": '"', "\u201d": '"',
     "\u00a0": " ",                      # non-breaking space
 }
 
-p = open(s["printer"], 'wb')
-now = datetime.now()
-timestr = now.strftime("%a %d %b %Y %H:%M")
-#p.write(("Started welcome script, " + timestr + "\n\n\n\n\n\n").encode("ascii"))
 client = snap7.client.Client()
 pol = "init"
 
-while True:
-    
-    with open("welcome.json", "r") as f:
-        s = json.load(f)
-        
-    #client.connect(s["plc"], 0, 1)
+while True:       
     for attempt in range(3):
         try: 
             client.connect(s["plc"], 0, 1)
+            # The PLC knows a function that enables power to the printer for a short time.
+            data = client.db_write(s["plc_db"], 2, b'x')
+            client.disconnect() 
             break
         except RuntimeError:
             if attempt == 2:
                 raise
-            time.sleep(2)
-    data = client.db_write(s["plc_db"], 2, b'x')
-    client.disconnect()    
-
+            time.sleep(2)   
 
     sys = text(s["prompt_interface"]) + "\n\n"
     if pol == "init":
@@ -146,24 +141,17 @@ while True:
     if pol == "leave":
         sys += text(s["prompt_leavehome"]) + "\n\n"
     sys += text(s["prompt_about"]) + "\n\n"
-    #prompt += "Historic messages, to avoid repeating yourself. These are responses TO BE AVOIDED:\n"
-    #for m in s["history"]:
-    #    prompt += m + "\n\n"
-    #prompt += "End of historic messages. DO NOT REPEAT THESE!\n\n"
+
     sys += text(s["prompt_measurement"]) + "\n"
 
     meas = meas_block()
-    #prompt += meas_block()
     now = datetime.now()
     if pol == "arrive":
         meas += return_block()
-    meas += now.strftime("\n\nCurrent date/time: %a %d %b %Y %H:%M\n\n")
+    meas += now.strftime("Current date/time: %a %d %b %Y %H:%M\n")
 
     history = []
     history.append({"role":"system", "content": sys})
-    #for h in s["history"]:
-    #    history.append({"role":"user", "content": h["user"]})
-    #    history.append({"role":"assistant", "content": h["assistant"]})
     history.append({"role": "user", "content": meas})
 
     payload = {
@@ -177,12 +165,8 @@ while True:
         headers=headers,
         json=payload
     ).json()
-    print(response)
     
-    #if "messages" in response["choices"][0]:
-    #    reply = "\n".join(m.get("content") or "" for m in response["choices"][0]["messages"] if m.get("content") )
-    #else:
-    #    reply = response["choices"][0]["message"]["content"]
+    #print(response)
         
     def get_text(msg):
         c = msg.get("content")
@@ -199,26 +183,19 @@ while True:
     )    
         
     timestr = now.strftime("%a %d %b %Y %H:%M")
-    history.append({"role": "assistant", "content": reply})
-    s["history"].append({"user":meas, "assistant":reply})
-    reply = reply.replace("\n", "\r\n")
     print(timestr)
-    print(meas)
+    #print(meas)
     print(reply)
-        #p.write((reply + "\r\n\n\n").encode("ascii"))
-    for oud, nieuw in VERTALING.items():
+
+    for oud, nieuw in Translation.items():
         reply = reply.replace(oud, nieuw)
 
-    p.write((timestr + "\n").encode("ascii"))
-    lines = textwrap.wrap(reply, width=80, break_long_words=False, break_on_hyphens=False)
-    for line in lines:
-        p.write((line[:80] + "\n").encode("ascii", "replace"))
-    p.write(("\n\n\n\n\n").encode("ascii", "replace"))
-    p.flush()
-
-    s["history"] = s["history"][-25:]
-
-    with open("welcome.json", "w") as f:
-        json.dump(s, f, indent=2)
+    with open(s["printer"], 'wb') as p:
+        p.write((timestr + "\n").encode("ascii"))
+        lines = textwrap.wrap(reply, width=80, break_long_words=False, break_on_hyphens=False)
+        for line in lines:
+            p.write((line[:80] + "\n").encode("ascii", "replace"))
+        p.write(("\n\n\n\n\n").encode("ascii", "replace"))
+        p.flush()
 
     pol = wait_for_arrive_or_leave()
