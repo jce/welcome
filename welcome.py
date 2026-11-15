@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import requests
 import json
+import random
 import urllib.request
 from datetime import datetime
 import textwrap
@@ -9,6 +10,18 @@ import snap7
 
 with open("welcome.json", "r") as f:
     s = json.load(f)
+
+# Loads one quotes file. Quotes are separated by blank lines and may span multiple lines.
+def load_quotes(fn):
+    with open(fn, "r") as f:
+        return [q.strip() for q in f.read().replace("\r\n", "\n").split("\n\n") if q.strip()]
+
+quotes_files = s.get("quotes_files", s.get("quotes_file", "quotes.txt"))
+if isinstance(quotes_files, str):
+    quotes_files = [quotes_files]
+quotes = []
+for qf in quotes_files:
+    quotes += load_quotes(qf)
 
 headers = {"Authorization": f"Bearer {s['API_KEY']}", "Content-Type": "application/json"}
 
@@ -141,6 +154,9 @@ while True:
     if pol == "leave":
         sys += text(s["prompt_leavehome"]) + "\n\n"
     sys += text(s["prompt_about"]) + "\n\n"
+
+    sys += "Include the following quote in your reply:\n"
+    sys += random.choice(quotes) + "\n\n"
 
     sys += text(s["prompt_measurement"]) + "\n"
 
