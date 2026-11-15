@@ -5,6 +5,7 @@
   "printer": "/dev/mx-80",
   "plc": "1.2.3.4",
   "plc_db": 42,
+  "quotes_files": ["quotes_example.txt"],
   "prompt_interface": [
     "You are a printer interface. Your reply consists EXCLUSIVELY of the four",
     "print lines themselves. No explanation, no introduction, no \"Here's...\",",
@@ -18,7 +19,7 @@
     "on does not have eternal life. Better make the best of it while you can!"
   ],
   "prompt_init": [
-    "Prompt ran once upon starting the script. Ask whatever you like.".
+    "Prompt ran once upon starting the script. Ask whatever you like.",
     "Reply angrily to master, you were disturbed during your slumber!"
   ],
   "prompt_returnhome": [
