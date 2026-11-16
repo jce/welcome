@@ -1,0 +1,19 @@
+# /etc/systemd/system/welcome.service 
+[Unit] 
+Description=Welcome service 
+After=network-online.target 
+Wants=network-online.target 
+ 
+[Service] 
+Type=simple 
+# Replace "you" with the actual username.
+User=you 
+# Replace "you" with the actual path.
+WorkingDirectory=/home/you/projects/welcome 
+ExecStart=./server.py 
+Restart=on-failure 
+RestartSec=10 
+ 
+[Install] 
+WantedBy=multi-user.target
+
